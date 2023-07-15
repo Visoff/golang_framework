@@ -2,41 +2,54 @@ package handlers
 
 import (
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"strings"
+
+	"github.com/dop251/goja"
+	"golang.org/x/net/html"
 )
 
-func RenderHtml(html string) string {
-	result, last := RenderHtml_frag(html)
-	if last {
-		return result
+func RenderHtml(htmlStr string) string {
+	doc, err := html.Parse(strings.NewReader(htmlStr))
+	if err != nil {
+		fmt.Println("Error parsing HTML:", err)
+		return ""
 	}
-	return RenderHtml(result)
+
+	replaceScriptTags(doc)
+
+	// Render the modified HTML
+	var sb strings.Builder
+	if err := html.Render(&sb, doc); err != nil {
+		fmt.Println("Error rendering HTML:", err)
+		return ""
+	}
+
+	renderedHTML := sb.String()
+	return renderedHTML
 }
 
-func RenderHtml_frag(html string) (string, bool) {
-	s := strings.Index(html, "<{")
-	if s == -1 {
-		fmt.Println("string start error")
-		return html, true
+func replaceScriptTags(n *html.Node) {
+	if n.Type == html.ElementNode {
+		for _, attr := range n.Attr {
+			if attr.Key == "side" && attr.Val == "server" {
+				vm := goja.New()
+				script := "(() => {" + n.FirstChild.Data + "})()"
+				vm.Set("ssr", "hello world")
+				result, err := vm.RunString(script)
+				if err != nil {
+					fmt.Println(err)
+					break
+				}
+				n.FirstChild = &html.Node{
+					Type: html.TextNode,
+					Data: result.String(),
+				}
+				break
+			}
+		}
 	}
-	s += 2
-	e := strings.Index(html, "}>")
-	if e == -1 {
-		fmt.Println("string end error")
-		return html, true
+
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		replaceScriptTags(c)
 	}
-	url := html[s:e]
-	response, err := http.Get(url)
-	if err != nil || response.StatusCode != 200 {
-		fmt.Println("request error")
-		return html[:s-2] + "request error" + html[e+2:], false
-	}
-	result, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		fmt.Println("body parse error")
-		return html[:s-2] + html[e+2:], false
-	}
-	return html[:s-2] + string(result) + html[e+2:], false
 }
