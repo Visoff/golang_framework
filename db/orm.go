@@ -49,7 +49,7 @@ func (query *Select_Query_Class) Query() []map[string]string {
 		data := make(map[string]string)
 		columns := make([]string, len(cols))
 		columnPointers := make([]interface{}, len(cols))
-		for i, _ := range columns {
+		for i := range columns {
 			columnPointers[i] = &columns[i]
 		}
 
